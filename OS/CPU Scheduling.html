@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CPU Scheduling Simulator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      text-align: center;
+      background-color: white;
+    }
+
+    table, th, td {
+      border: 1px solid black;
+      border-collapse: collapse;
+      padding: 5px;
+      margin: 0 auto;
+    }
+
+    th {
+      background-color: #e0e0e0;
+    }
+
+    #ganttChart {
+      display: block;
+      margin: 30px auto;
+      position: relative;
+      height: 80px;
+      width: fit-content;
+      background: transparent;
+      padding: 0;
+      border: none;
+    }
+
+    #ganttChart div {
+      position: absolute;
+      height: 60px;
+      top: 10px;
+      border-radius: 10px;
+      font-weight: bold;
+      padding-top: 10px;
+      text-align: center;
+      background-color: #DFF6FF;
+    }
+
+    .legend {
+      max-width: 500px;
+      margin: 20px auto;
+      text-align: left;
+    }
+
+    .animate-block {
+      animation: fadeIn 1s ease-out forwards;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: scale(0.5);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>CPU Scheduling Simulator</h1>
+
+  <form id="processForm">
+    <input type="number" placeholder="Arrival Time (optional)" id="arrivalTime">
+    <input type="number" placeholder="Burst Time" id="burstTime" required>
+    <input type="number" placeholder="Priority (optional)" id="priority">
+    <button type="submit">Add Process</button>
+  </form>
+
+  <br>
+
+  <button onclick="runFCFS()">FCFS</button>
+  <button onclick="runSJF()">SJF</button>
+  <button onclick="runPriority()">Priority</button>
+  <button onclick="runRR()">Round Robin</button>
+  <input type="number" id="timeQuantum" placeholder="Time Quantum (RR)">
+
+  <br><br>
+
+  <h2>Process Table</h2>
+  <table id="processTable">
+    <tr>
+      <th>PID</th>
+      <th>AT</th>
+      <th>BT</th>
+      <th>CT</th>
+      <th>TAT</th>
+      <th>WT</th>
+    </tr>
+  </table>
+
+  <div class="legend">
+    <p><strong>PID</strong>: Process ID</p>
+    <p><strong>AT</strong>: Arrival Time</p>
+    <p><strong>BT</strong>: Burst Time</p>
+    <p><strong>CT</strong>: Completion Time</p>
+    <p><strong>TAT</strong>: Turnaround Time = CT - AT</p>
+    <p><strong>WT</strong>: Waiting Time = TAT - BT</p>
+  </div>
+
+  <h2>Gantt Chart</h2>
+  <div id="ganttChart"></div>
+
+  <script>
+    let processes = [];
+    let pid = 1;
+
+    document.getElementById("processForm").addEventListener("submit", function (e) {
+      e.preventDefault();
+      let arrivalInput = document.getElementById("arrivalTime").value;
+      let burstInput = document.getElementById("burstTime").value;
+
+      let arrival = arrivalInput === "" ? 0 : parseInt(arrivalInput);
+      let burst = burstInput === "" ? 0 : parseInt(burstInput);
+      let priority = parseInt(document.getElementById("priority").value || 0);
+
+      if (isNaN(burst) || burst <= 0) {
+        alert("Please enter a valid Burst Time greater than 0.");
+        return;
+      }
+
+      processes.push({ pid: pid++, arrival, burst, priority });
+      document.getElementById("arrivalTime").value = "";
+      document.getElementById("burstTime").value = "";
+      document.getElementById("priority").value = "";
+    });
+
+    function displayResults(procList) {
+      const table = document.getElementById("processTable");
+      table.innerHTML = `
+        <tr>
+          <th>PID</th><th>AT</th><th>BT</th><th>CT</th><th>TAT</th><th>WT</th>
+        </tr>`;
+      const gantt = document.getElementById("ganttChart");
+      gantt.innerHTML = "";
+
+      const colors = ["#FFD59E", "#B8E0FF", "#FFB3BA", "#B5EAD7", "#E0BBE4", "#C9C9FF"];
+
+      procList.forEach((p, index) => {
+        const row = `<tr><td>${p.pid}</td><td>${p.arrival}</td><td>${p.burst}</td><td>${p.completion}</td><td>${p.turnaround}</td><td>${p.waiting}</td></tr>`;
+        table.innerHTML += row;
+
+        const block = document.createElement("div");
+        block.style.width = `${(p.completion - p.start) * 30}px`;
+        block.style.left = `${p.start * 30}px`;
+        block.style.backgroundColor = colors[index % colors.length];
+        block.innerHTML = `P${p.pid}<br><small>${p.start} - ${p.completion}</small>`;
+        block.classList.add("animate-block");
+        gantt.appendChild(block);
+      });
+    }
+
+    function runFCFS() {
+      let plist = processes.map(p => ({ ...p }));
+      plist.sort((a, b) => a.arrival - b.arrival);
+      let time = 0;
+
+      plist.forEach(p => {
+        if (time < p.arrival) time = p.arrival;
+        p.start = time;
+        time += p.burst;
+        p.completion = time;
+        p.turnaround = p.completion - p.arrival;
+        p.waiting = p.turnaround - p.burst;
+      });
+
+      displayResults(plist);
+    }
+
+    function runSJF() {
+      let plist = processes.map(p => ({ ...p, done: false }));
+      let time = 0, completed = 0, result = [];
+
+      while (completed < plist.length) {
+        let ready = plist.filter(p => !p.done && p.arrival <= time);
+        if (ready.length === 0) {
+          time++;
+          continue;
+        }
+
+        let shortest = ready.reduce((a, b) => a.burst < b.burst ? a : b);
+        shortest.start = time;
+        time += shortest.burst;
+        shortest.completion = time;
+        shortest.turnaround = shortest.completion - shortest.arrival;
+        shortest.waiting = shortest.turnaround - shortest.burst;
+        shortest.done = true;
+        result.push(shortest);
+        completed++;
+      }
+
+      displayResults(result);
+    }
+
+    function runPriority() {
+      let plist = processes.map(p => ({ ...p, done: false }));
+      let time = 0, completed = 0, result = [];
+
+      while (completed < plist.length) {
+        let ready = plist.filter(p => !p.done && p.arrival <= time);
+        if (ready.length === 0) {
+          time++;
+          continue;
+        }
+
+        let highest = ready.reduce((a, b) => a.priority < b.priority ? a : b);
+        highest.start = time;
+        time += highest.burst;
+        highest.completion = time;
+        highest.turnaround = highest.completion - highest.arrival;
+        highest.waiting = highest.turnaround - highest.burst;
+        highest.done = true;
+        result.push(highest);
+        completed++;
+      }
+
+      displayResults(result);
+    }
+
+    function runRR() {
+      let tq = parseInt(document.getElementById("timeQuantum").value);
+      if (!tq || tq <= 0) return alert("Enter a valid Time Quantum");
+
+      let plist = processes.map(p => ({ ...p, remaining: p.burst }));
+      let time = 0, queue = [], result = [];
+      let i = 0;
+      let executionLog = [];
+
+      plist.sort((a, b) => a.arrival - b.arrival);
+
+      while (i < plist.length || queue.length > 0) {
+        while (i < plist.length && plist[i].arrival <= time) queue.push(plist[i++]);
+
+        if (queue.length === 0) {
+          time = plist[i].arrival;
+          continue;
+        }
+
+        let current = queue.shift();
+        let execTime = Math.min(tq, current.remaining);
+        executionLog.push({
+          pid: current.pid,
+          start: time,
+          end: time + execTime
+        });
+
+        time += execTime;
+        current.remaining -= execTime;
+
+        while (i < plist.length && plist[i].arrival <= time) queue.push(plist[i++]);
+
+        if (current.remaining > 0) {
+          queue.push(current);
+        } else {
+          current.completion = time;
+          current.turnaround = current.completion - current.arrival;
+          current.waiting = current.turnaround - current.burst;
+          result.push(current);
+        }
+      }
+
+      displayResultsRR(result, executionLog);
+    }
+
+    function displayResultsRR(procList, execLog) {
+      const table = document.getElementById("processTable");
+      table.innerHTML = `
+        <tr>
+          <th>PID</th><th>AT</th><th>BT</th><th>CT</th><th>TAT</th><th>WT</th>
+        </tr>`;
+      const gantt = document.getElementById("ganttChart");
+      gantt.innerHTML = "";
+
+      const colors = ["#FFD59E", "#B8E0FF", "#FFB3BA", "#B5EAD7", "#E0BBE4", "#C9C9FF"];
+
+      procList.forEach((p, index) => {
+        const row = `<tr><td>${p.pid}</td><td>${p.arrival}</td><td>${p.burst}</td><td>${p.completion}</td><td>${p.turnaround}</td><td>${p.waiting}</td></tr>`;
+        table.innerHTML += row;
+      });
+
+      execLog.forEach((log, i) => {
+        const block = document.createElement("div");
+        block.style.width = `${(log.end - log.start) * 30}px`;
+        block.style.left = `${log.start * 30}px`;
+        block.style.backgroundColor = colors[(log.pid - 1) % colors.length];
+        block.innerHTML = `P${log.pid}<br><small>${log.start} - ${log.end}</small>`;
+        block.classList.add("animate-block");
+        gantt.appendChild(block);
+      });
+    }
+  </script>
+
+</body>
+</html>
