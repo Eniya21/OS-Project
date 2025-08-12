@@ -1,0 +1,14 @@
+{
+  "name": "campus-connect",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev:server": "npm --prefix apps/server run dev",
+    "dev:server:build": "npm --prefix apps/server run build && node apps/server/dist/index.js",
+    "dev:client": "npm --prefix apps/client run dev",
+    "build:server": "npm --prefix apps/server run build",
+    "build:client": "npm --prefix apps/client run build",
+    "build": "npm run build:server && npm run build:client",
+    "start:server": "node apps/server/dist/index.js"
+  }
+}
